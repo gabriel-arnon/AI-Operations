@@ -9,8 +9,7 @@ Automação empresarial para receber solicitações de suporte, classificá-las 
 - **Parte teórica:** [Parte Teórica — Arquitetura da Automação (PDF)](docs/Parte%20Teorica.pdf).
 - **Parte prática:** workflows n8n em [`workflows/`](workflows/) e dados de teste sintéticos em [`examples/`](examples/).
 - **README:** este documento descreve problema, arquitetura, ferramentas, IA, integrações e como testar/compreender o fluxo.
-- **Evidências:** as execuções ponta a ponta foram validadas, mas as capturas reais redigidas ainda precisam ser adicionadas.
-- **Vídeo pitch:** gravação e link acessível ainda pendentes.
+- **Evidências reais:** as capturas dos workflows, do formulário e do e-mail de teste estão na galeria abaixo; dados pessoais do e-mail foram redigidos.
 
 ## Problema e solução
 
@@ -65,8 +64,22 @@ A demonstração temporária do formulário está em <https://ai-operations-inta
 
 As credenciais ficam em armazenamentos server-side/n8n, não no navegador nem neste repositório. O editor n8n deve permanecer protegido por Cloudflare Access e o webhook por autenticação própria. Não crie bypass amplo. `.env.local`, arquivos `.dev.vars`, caches Wrangler e dependências locais são ignorados pelo Git.
 
-## Status da entrega
+## Evidências da execução
 
-- Fluxos de baixo risco e de aprovação humana foram validados ponta a ponta; recebimento dos e-mails de teste foi confirmado.
-- **Pendente:** adicionar capturas reais dos workflows e dos registros, ocultando dados pessoais, IDs e credenciais. Não use imagens simuladas.
-- **Pendente:** gravar o pitch (até 4 minutos), publicá-lo em uma plataforma acessível e substituir esta linha pelo link: **[inserir link do vídeo]**.
+Fluxos de baixo risco e de aprovação humana foram validados ponta a ponta; o recebimento dos e-mails de teste foi confirmado. As capturas abaixo foram feitas na demonstração real.
+
+### Workflow de triagem
+
+![Workflow n8n de triagem, classificação e decisão](docs/evidencias/01-workflow-triagem.png)
+
+### Workflow de aprovação humana
+
+![Workflow n8n agendado para processar aprovações humanas](docs/evidencias/02-workflow-aprovacao.png)
+
+### Formulário e e-mail de teste
+
+![Formulário temporário de demonstração](docs/evidencias/04-formulario-demonstracao.png)
+
+O e-mail de teste foi recebido. O cabeçalho da captura foi redigido para não expor endereço pessoal nem identificador da solicitação.
+
+![Conteúdo do e-mail de teste recebido, com cabeçalho redigido](docs/evidencias/03-email-teste-redigido.png)

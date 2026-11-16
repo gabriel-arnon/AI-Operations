@@ -20,3 +20,6 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+
+# Original screenshots may contain personal data; publish only reviewed/redacted copies.
+/docs/evidencias/Captura de tela *.png
