@@ -36,7 +36,7 @@ flowchart LR
 ## Ferramentas e integrações
 
 - **n8n:** orquestração, validações, regras e persistência.
-- **OpenAI API (`gpt-4o-mini`):** classificação, resumo e sugestão de resposta em JSON.
+- **OpenAI API:** a implementação registrada usa `gpt-5.4-mini`; os templates alternativos em `workflows/` permanecem configurados com `gpt-4o-mini`. O modelo classifica, resume e sugere respostas em JSON.
 - **Data Tables:** persistência usada pela implantação validada; **Google Sheets:** alternativa representada pelos templates versionados.
 - **SMTP:** envio de respostas.
 - **Cloudflare Tunnel e Access:** publicação e controle de acesso da instância n8n.
@@ -83,3 +83,13 @@ Fluxos de baixo risco e de aprovação humana foram validados ponta a ponta; o r
 O e-mail de teste foi recebido. O cabeçalho da captura foi redigido para não expor endereço pessoal nem identificador da solicitação.
 
 ![Conteúdo do e-mail de teste recebido, com cabeçalho redigido](docs/evidencias/03-email-teste-redigido.png)
+
+### Histórico de execução e registros
+
+As capturas a seguir complementam as evidências dos workflows com o histórico do workflow de aprovação e os estados persistidos na Data Table. Métricas globais da instância, identificadores, nomes, e-mails, mensagens e respostas pessoais foram omitidos ou redigidos.
+
+![Histórico real do workflow de aprovação; métricas globais e IDs das execuções omitidos](docs/evidencias/05-historico-execucoes-redigido.png)
+
+![Campos de triagem na Data Table; IDs e dados pessoais redigidos](docs/evidencias/06-data-table-classificacao-redigida.png)
+
+![Estados PENDENTE, ENVIADA_AUTO e ENVIADA_HUMANA na Data Table; textos e nome do revisor redigidos](docs/evidencias/07-data-table-estados-redigida.png)
