@@ -1,0 +1,183 @@
+{
+  "name": "AI Operations - 02 Aprovação Human-in-the-Loop",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "triggerOAuth2",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "event": "rowUpdate",
+        "includeInOutput": "new",
+        "options": {
+          "columnsToWatch": ["approval_status"]
+        }
+      },
+      "id": "4a2b1c0e-b2f9-4936-bcd0-cda64a074ccd",
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "12ba07e2-f0dd-4f3d-b8a0-a9729ed0172a",
+              "leftValue": "={{ $json.approval_status }}",
+              "rightValue": "APROVADA",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "88abbb08-6192-47e1-9b0a-5f9d82520131",
+      "name": "Aprovação explícita?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $('Google Sheets Trigger').item.json.request_id }}",
+            "approval_status": "PROCESSANDO"
+          },
+          "matchingColumns": ["request_id"],
+          "schema": [
+            { "id": "request_id", "displayName": "request_id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "approval_status", "displayName": "approval_status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "74eb07c5-08c4-4683-a13e-798e34275b7b",
+      "name": "Reivindicar aprovação",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [520, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "fromEmail": "suporte@seudominio.com.br",
+        "toEmail": "={{ $('Google Sheets Trigger').item.json.customer_email }}",
+        "subject": "={{ '[AI Operations] Solicitação ' + $('Google Sheets Trigger').item.json.request_id }}",
+        "emailFormat": "text",
+        "text": "={{ $('Google Sheets Trigger').item.json.draft_reply }}",
+        "options": {}
+      },
+      "id": "a739d96f-c063-4f1b-b4e6-ef6fe3ca2421",
+      "name": "Enviar resposta aprovada",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [780, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $('Google Sheets Trigger').item.json.request_id }}",
+            "approval_status": "ENVIADA_HUMANA",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["request_id"],
+          "schema": [
+            { "id": "request_id", "displayName": "request_id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "approval_status", "displayName": "approval_status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "sent_at", "displayName": "sent_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fdab3c18-3e4d-42e2-b724-c94f1b39ddc2",
+      "name": "Concluir envio aprovado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1040, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [[{ "node": "Aprovação explícita?", "type": "main", "index": 0 }]]
+    },
+    "Aprovação explícita?": {
+      "main": [
+        [{ "node": "Reivindicar aprovação", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Reivindicar aprovação": {
+      "main": [[{ "node": "Enviar resposta aprovada", "type": "main", "index": 0 }]]
+    },
+    "Enviar resposta aprovada": {
+      "main": [[{ "node": "Concluir envio aprovado", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "597c0288-2d83-428e-9f01-65c6b56071b6",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

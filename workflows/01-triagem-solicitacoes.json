@@ -1,0 +1,316 @@
+{
+  "name": "AI Operations - 01 Triagem de Solicitações",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-operations/solicitacoes",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "846f037a-cd01-4d31-b38c-5a48b07d19d1",
+      "name": "Entrada HTTP",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 300],
+      "webhookId": "b7d1a17b-88bb-482d-80c7-8dff08803eb0"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = ($json.body && typeof $json.body === 'object') ? $json.body : $json;\nconst name = String(body.name ?? '').trim();\nconst email = String(body.email ?? '').trim().toLowerCase();\nconst message = String(body.message ?? '').trim();\nif (!name || name.length > 120) throw new Error('O campo name é obrigatório e deve ter até 120 caracteres.');\nif (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) throw new Error('O campo email é inválido.');\nif (!message) throw new Error('O campo message é obrigatório.');\nif (message.length > 5000) throw new Error('O campo message excede o limite de 5.000 caracteres.');\nconst now = new Date();\nconst requestId = `REQ-${now.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;\nreturn { json: { request_id: requestId, created_at: now.toISOString(), customer_name: name, customer_email: email, message } };"
+      },
+      "id": "e88e06e1-669d-493b-ac9b-c45c46409b70",
+      "name": "Validar e normalizar solicitação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'gpt-4o-mini', temperature: 0.1, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Você é um assistente de triagem de suporte. Classifique apenas com base no texto recebido. Não execute ações, não prometa reembolso, compensação ou prazo não confirmado e nunca peça senhas, códigos ou dados completos de pagamento. Responda somente JSON válido com as chaves category, priority, confidence, summary, draft_reply, needs_human_review e review_reason. category deve ser acesso, bug, duvida, pagamento, privacidade, juridico ou outro. priority deve ser baixa, media, alta ou urgente. confidence deve ser número de 0 a 1. Marque needs_human_review para qualquer caso que pareça sensível, urgente ou incerto. Escreva em português brasileiro.' }, { role: 'user', content: 'Classifique a solicitação e proponha uma resposta segura e breve. Texto: ' + $json.message } ] } }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "ad5b9ea9-72c9-4d77-b397-17093764b7e3",
+      "name": "Classificar com OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const request = $('Validar e normalizar solicitação').item.json;\nconst response = $json;\nconst safeCategories = new Set(['acesso', 'bug', 'duvida']);\nconst riskyCategories = new Set(['pagamento', 'privacidade', 'juridico', 'outro']);\nlet ai = null;\nlet failureReason = '';\ntry {\n  const content = response?.choices?.[0]?.message?.content;\n  if (!content) throw new Error(response?.error?.message || response?.error || 'Resposta vazia da IA.');\n  ai = JSON.parse(content);\n} catch (error) { failureReason = String(error.message || 'Falha ao interpretar resposta da IA.'); }\nconst validPriorities = new Set(['baixa', 'media', 'alta', 'urgente']);\nconst category = String(ai?.category ?? '').toLowerCase();\nconst priority = String(ai?.priority ?? '').toLowerCase();\nconst confidenceRaw = Number(ai?.confidence);\nconst confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : 0;\nconst aiAvailable = Boolean(ai && safeCategories.has(category) || ai && riskyCategories.has(category));\nconst validAI = aiAvailable && validPriorities.has(priority) && typeof ai.summary === 'string' && typeof ai.draft_reply === 'string';\nconst finalCategory = validAI ? category : 'outro';\nconst finalPriority = validAI ? priority : 'alta';\nconst finalConfidence = validAI ? confidence : 0;\nconst needsHuman = !validAI || !safeCategories.has(finalCategory) || finalPriority === 'urgente' || finalConfidence < 0.75 || ai.needs_human_review === true;\nconst fallbackReply = 'Recebemos sua solicitação. Nossa equipe fará a análise e retornará assim que possível.';\nconst draftReply = validAI ? String(ai.draft_reply).trim().slice(0, 1500) : fallbackReply;\nconst reviewReason = !validAI ? (failureReason || 'Resposta da IA incompleta ou inválida.') : (String(ai.review_reason ?? '').trim() || (needsHuman ? 'Regra de segurança exige revisão humana.' : ''));\nreturn { json: { ...request, category: finalCategory, priority: finalPriority, confidence: finalConfidence, summary: validAI ? String(ai.summary).trim().slice(0, 500) : 'Classificação automática indisponível; analisar solicitação manualmente.', draft_reply: draftReply, needs_human_review: needsHuman, review_reason: needsHuman ? reviewReason : '', approval_status: needsHuman ? 'PENDENTE' : 'AUTO_APROVADA', reviewer: '', review_notes: '', sent_at: '', ai_model: validAI ? 'gpt-4o-mini' : 'fallback-manual' } };"
+      },
+      "id": "02cbfc31-695a-4205-8c55-b25657c66572",
+      "name": "Aplicar regras de segurança",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = { ...$json };\nconst normalized = String(item.message ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();\nconst signals = [\n  { category: 'pagamento', pattern: /\\b(pagamento|cobranca|fatura|estorno|reembolso|cartao|pix)\\b/ },\n  { category: 'privacidade', pattern: /\\b(privacidade|lgpd|dados pessoais|vazamento|senha|acesso nao autorizado|dados expostos)\\b/ },\n  { category: 'juridico', pattern: /\\b(advogado|juridic\\w*|processo judicial|procon|acao judicial)\\b/ },\n  { category: 'urgencia', pattern: /\\b(urgente|imediatamente|agora|hoje|emergencia|vazamento)\\b/ }\n];\nconst signal = signals.find((entry) => entry.pattern.test(normalized));\nif (signal) {\n  item.needs_human_review = true;\n  item.approval_status = 'PENDENTE';\n  item.review_reason = `Sinal determinístico de ${signal.category} no texto; revisão humana obrigatória.`;\n}\nreturn { json: item };"
+      },
+      "id": "91ce0757-c129-4f07-a8ca-1206ed388acc",
+      "name": "Forçar revisão por sinais de risco",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "cellFormat": "RAW",
+          "handlingExtraData": "ignoreIt",
+          "useAppend": true
+        }
+      },
+      "id": "e9250776-b4c4-4bec-9a26-a8f58d6940df",
+      "name": "Registrar na fila Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1020, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bd0b417d-f8a7-4f81-89eb-f43ad00e26ae",
+              "leftValue": "={{ $json.needs_human_review }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f4efb66-576b-455b-a47a-2c42c3fa0199",
+      "name": "Exige revisão humana?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1260, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "suporte@seudominio.com.br",
+        "toEmail": "={{ $('Aplicar regras de segurança').item.json.customer_email }}",
+        "subject": "={{ '[AI Operations] Solicitação ' + $('Aplicar regras de segurança').item.json.request_id }}",
+        "emailFormat": "text",
+        "text": "={{ $('Aplicar regras de segurança').item.json.draft_reply }}",
+        "options": {}
+      },
+      "id": "5183ae8f-4cf9-4a95-b2f3-c396da8fba5d",
+      "name": "Enviar resposta automática",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1500, 500],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $('Aplicar regras de segurança').item.json.request_id }}",
+            "approval_status": "PROCESSANDO_AUTO"
+          },
+          "matchingColumns": ["request_id"],
+          "schema": [
+            { "id": "request_id", "displayName": "request_id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "approval_status", "displayName": "approval_status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ca3dd6b9-4c67-4af2-88b9-c37f26e290e3",
+      "name": "Reivindicar envio automático",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1480, 500],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SUBSTITUA_PELO_ID_DA_PLANILHA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Solicitacoes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $('Aplicar regras de segurança').item.json.request_id }}",
+            "approval_status": "ENVIADA_AUTO",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["request_id"],
+          "schema": [
+            { "id": "request_id", "displayName": "request_id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "approval_status", "displayName": "approval_status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "sent_at", "displayName": "sent_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "19a21b6f-8756-47f3-a2ab-55ab05b223f3",
+      "name": "Marcar envio automático",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1740, 500],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, request_id: $('Aplicar regras de segurança').item.json.request_id, approval_status: 'PENDENTE', message: 'Solicitação registrada para revisão humana.' } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2b277d3a-ec8b-4bc3-acf3-6d0f7640c34f",
+      "name": "Responder - revisão pendente",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1500, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, request_id: $('Aplicar regras de segurança').item.json.request_id, approval_status: 'ENVIADA_AUTO', message: 'Resposta automática enviada.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f88da1e1-8ca5-4f7b-9c9b-b06685944cc1",
+      "name": "Responder - enviada automaticamente",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1980, 500]
+    }
+  ],
+  "connections": {
+    "Entrada HTTP": {
+      "main": [[{ "node": "Validar e normalizar solicitação", "type": "main", "index": 0 }]]
+    },
+    "Validar e normalizar solicitação": {
+      "main": [[{ "node": "Classificar com OpenAI", "type": "main", "index": 0 }]]
+    },
+    "Classificar com OpenAI": {
+      "main": [[{ "node": "Aplicar regras de segurança", "type": "main", "index": 0 }]]
+    },
+    "Aplicar regras de segurança": {
+      "main": [[{ "node": "Forçar revisão por sinais de risco", "type": "main", "index": 0 }]]
+    },
+    "Forçar revisão por sinais de risco": {
+      "main": [[{ "node": "Registrar na fila Google Sheets", "type": "main", "index": 0 }]]
+    },
+    "Registrar na fila Google Sheets": {
+      "main": [[{ "node": "Exige revisão humana?", "type": "main", "index": 0 }]]
+    },
+    "Exige revisão humana?": {
+      "main": [
+        [{ "node": "Responder - revisão pendente", "type": "main", "index": 0 }],
+        [{ "node": "Reivindicar envio automático", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reivindicar envio automático": {
+      "main": [[{ "node": "Enviar resposta automática", "type": "main", "index": 0 }]]
+    },
+    "Enviar resposta automática": {
+      "main": [[{ "node": "Marcar envio automático", "type": "main", "index": 0 }]]
+    },
+    "Marcar envio automático": {
+      "main": [[{ "node": "Responder - enviada automaticamente", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "8c02865a-2d73-4b17-b3d7-bd8aa98bc8a3",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

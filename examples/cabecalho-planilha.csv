@@ -1,0 +1,1 @@
+request_id,created_at,customer_name,customer_email,message,category,priority,confidence,summary,draft_reply,needs_human_review,review_reason,approval_status,reviewer,review_notes,sent_at,ai_model

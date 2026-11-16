@@ -1,0 +1,22 @@
+# Local environment files and credentials. Keep only a deliberately redacted example.
+.env
+.env.*
+!.env.example
+**/.dev.vars
+**/.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and local Cloudflare/Wrangler state.
+node_modules/
+.wrangler/
+**/.wrangler/
+
+# Generated test/build output and operating-system files.
+coverage/
+dist/
+.DS_Store
+Thumbs.db
+*.log
